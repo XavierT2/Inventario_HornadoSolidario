@@ -20,11 +20,16 @@ public class Venta extends PanacheEntityBase {
     public LocalDateTime fechaHora;
     
     public BigDecimal total;
+
+    public String cajero;
+    
+    public String estado = "PREPARANDO";
     
     public Venta() {}
     
-    public Venta(LocalDateTime fechaHora, BigDecimal total) {
+    public Venta(LocalDateTime fechaHora, BigDecimal total, String cajero) {
         this.fechaHora = fechaHora;
         this.total = total;
+        this.cajero = cajero;
     }
 }
