@@ -86,7 +86,9 @@ const cobrar = async () => {
       
       Swal.fire({
         title: `✅ ORDEN #${ventaAgregada.id}`,
-        html: `<div class="text-2xl mt-2 font-medium text-slate-600">Dile este número al cliente en voz alta.</div>`,
+        html: `<div class="text-2xl mt-4 font-bold text-slate-700 bg-slate-100 py-3 rounded-lg border border-slate-300 shadow-inner">
+                 📝 Anota este número en un papel y entrégaselo al cliente.
+               </div>`,
         icon: 'success',
         confirmButtonText: 'Siguiente Cliente',
         confirmButtonColor: '#4f46e5'
