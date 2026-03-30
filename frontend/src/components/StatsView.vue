@@ -5,16 +5,21 @@ import Swal from 'sweetalert2';
 
 const apiUrl = '/api';
 const stats = ref({ totalCajaEfectivo: 0, conteoProductos: {}, estadisticasPorCajero: {} });
+const catalogo = ref([]);
 const loading = ref(true);
 
 const fetchStats = async () => {
   loading.value = true;
   try {
-    const { data } = await axios.get(`${apiUrl}/estadisticas`);
-    stats.value = data;
+    const [resStats, resCat] = await Promise.all([
+      axios.get(`${apiUrl}/estadisticas`),
+      axios.get(`${apiUrl}/productos`)
+    ]);
+    stats.value = resStats.data;
+    catalogo.value = resCat.data;
   } catch (error) {
-    console.error('Error fetching stats', error);
-    Swal.fire('Error', 'No se pudieron cargar las estadísticas', 'error');
+    console.error('Error fetching data', error);
+    Swal.fire('Error', 'No se pudieron cargar los datos', 'error');
   } finally {
     loading.value = false;
   }
@@ -52,9 +57,137 @@ const eliminarCajero = async (cajeroName) => {
   }
 };
 
+const reiniciarVentas = async () => {
+  const { value: pin } = await Swal.fire({
+    title: '¡PELIGRO! ¿Barrer todo el evento?',
+    html: "<p>Esto borrará <b>TODO el dinero</b> y <b>TODOS los historiales de los cajeros</b>, regresando el ticket inicial a <b>#1</b>.</p><br><p class='text-sm text-slate-500'>*El Catálogo de productos NO se borrará, solo las ventas.</p>",
+    icon: 'warning',
+    input: 'password',
+    inputAttributes: {
+      inputmode: 'numeric',
+      pattern: '[0-9]*'
+    },
+    showCancelButton: true,
+    confirmButtonText: 'Sí, Empezar de Cero (Ticket #1)',
+    cancelButtonText: 'Cancelar',
+    confirmButtonColor: '#e11d48'
+  });
+
+  if (pin === '172246') {
+    try {
+      loading.value = true;
+      await axios.delete(`${apiUrl}/ventas/reset`);
+      await fetchStats();
+      Swal.fire('¡Reseteado a Cero!', `El evento está limpio. Tu próximo ticket será el #1.`, 'success');
+    } catch (error) {
+      console.error(error);
+      Swal.fire('Error', 'No se pudo reiniciar el evento', 'error');
+    } finally {
+      loading.value = false;
+    }
+  } else if (pin) {
+    Swal.fire('Denegado', 'El PIN Supremo es incorrecto', 'error');
+  }
+};
+
 onMounted(() => {
   fetchStats();
 });
+
+const agregarProducto = async () => {
+  const { value: formValues } = await Swal.fire({
+    title: 'Añadir Nuevo Producto',
+    html:
+      '<input id="swal-input1" class="swal2-input" placeholder="Nombre (Ej. Porción Extra)">' +
+      '<input id="swal-input2" class="swal2-input" type="number" step="0.50" placeholder="Precio (Ej. 1.50)">',
+    focusConfirm: false,
+    showCancelButton: true,
+    confirmButtonColor: '#4f46e5',
+    confirmButtonText: 'Guardar Producto',
+    cancelButtonText: 'Cancelar',
+    preConfirm: () => {
+      const nombre = document.getElementById('swal-input1').value;
+      const precio = document.getElementById('swal-input2').value;
+      if (!nombre || !precio) {
+        Swal.showValidationMessage('Ambos campos son obligatorios');
+      }
+      return { nombre, precio: parseFloat(precio) }
+    }
+  });
+
+  if (formValues) {
+    try {
+      loading.value = true;
+      await axios.post(`${apiUrl}/productos`, formValues);
+      Swal.fire('¡Añadido!', `El producto ${formValues.nombre} ha sido creado.`, 'success');
+      fetchStats();
+    } catch (error) {
+      console.error(error);
+      Swal.fire('Error', 'No se pudo crear el producto', 'error');
+    } finally {
+      loading.value = false;
+    }
+  }
+};
+
+const editarProducto = async (producto) => {
+  const { value: formValues } = await Swal.fire({
+    title: 'Editar Producto',
+    html:
+      `<input id="swal-edit1" class="swal2-input" value="${producto.nombre}" placeholder="Nombre">` +
+      `<input id="swal-edit2" class="swal2-input" type="number" step="0.50" value="${producto.precio}" placeholder="Precio">`,
+    focusConfirm: false,
+    showCancelButton: true,
+    confirmButtonColor: '#4f46e5',
+    confirmButtonText: 'Actualizar',
+    cancelButtonText: 'Cancelar',
+    preConfirm: () => {
+      const nombre = document.getElementById('swal-edit1').value;
+      const precio = document.getElementById('swal-edit2').value;
+      if (!nombre || !precio) {
+        Swal.showValidationMessage('Ambos campos son obligatorios');
+      }
+      return { nombre, precio: parseFloat(precio) }
+    }
+  });
+
+  if (formValues) {
+    try {
+      loading.value = true;
+      await axios.put(`${apiUrl}/productos/${producto.id}`, formValues);
+      Swal.fire('Actualizado', `Producto guardado con éxito.`, 'success');
+      fetchStats();
+    } catch (error) {
+      console.error(error);
+      Swal.fire('Error', 'No se pudo actualizar', 'error');
+      loading.value = false;
+    }
+  }
+};
+
+const borrarProducto = async (id, nombre) => {
+  const confirm = await Swal.fire({
+    title: '¿Estás seguro?',
+    text: `Se eliminará ${nombre}. (No se puede borrar si ya vendiste al menos uno)`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#ef4444',
+    confirmButtonText: 'Sí, Borrar',
+    cancelButtonText: 'Cancelar'
+  });
+
+  if (confirm.isConfirmed) {
+    try {
+      loading.value = true;
+      await axios.delete(`${apiUrl}/productos/${id}`);
+      fetchStats();
+      Swal.fire('Eliminado', 'Producto borrado del catálogo', 'success');
+    } catch (error) {
+      Swal.fire('Acción Denegada', error.response?.data || 'Error desconocido', 'error');
+      loading.value = false;
+    }
+  }
+};
 
 const descargarReporte = () => {
   if (Object.keys(stats.value.conteoProductos).length === 0) {
@@ -128,10 +261,21 @@ const descargarReporte = () => {
     <!-- Header -->
     <div class="flex justify-between items-center">
       <div>
-        <h2 class="text-4xl font-black text-slate-800">Cierre de Caja</h2>
+        <h2 class="text-4xl font-black text-slate-800">Gestión y Reportes</h2>
         <p class="text-slate-500 mt-2 text-lg">Resumen financiero y de inventario del evento</p>
       </div>
       <div class="flex gap-4">
+        <button @click="agregarProducto" class="bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/30 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all hover:-translate-y-1">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+          Nuevo Producto
+        </button>
+        <button @click="reiniciarVentas" class="bg-rose-50 border-2 border-rose-200 hover:border-rose-400 hover:bg-rose-100 text-rose-700 px-4 py-3 rounded-xl font-bold flex items-center gap-2 shadow-sm transition-all hover:shadow-md" title="Reiniciar evento a Ticket #1">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
         <button @click="descargarReporte" class="bg-indigo-50 border-2 border-indigo-200 hover:border-indigo-500 hover:bg-indigo-100 text-indigo-700 px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-sm transition-all hover:shadow-md">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -191,6 +335,30 @@ const descargarReporte = () => {
                   <span class="text-slate-400 font-bold uppercase tracking-wider text-xs">uds</span>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <hr class="border-slate-200">
+
+      <!-- Gestión del Catálogo -->
+      <div>
+        <h3 class="text-xl font-bold text-slate-500 mb-4 uppercase tracking-wider">Gestión de Catálogo</h3>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div v-for="producto in catalogo" :key="producto.id" 
+               class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col justify-between hover:shadow-md transition">
+            <div>
+              <h4 class="font-bold text-slate-800 text-lg leading-tight mb-2">{{ producto.nombre }}</h4>
+              <span class="bg-emerald-100 text-emerald-800 font-black px-3 py-1 rounded-lg text-lg">$ {{ producto.precio.toFixed(2) }}</span>
+            </div>
+            <div class="flex gap-2 mt-4 pt-4 border-t border-slate-100">
+               <button @click="editarProducto(producto)" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 py-2 rounded-lg font-bold text-sm transition">Editar</button>
+               <button @click="borrarProducto(producto.id, producto.nombre)" class="bg-rose-50 hover:bg-rose-100 text-rose-500 px-3 py-2 rounded-lg transition" title="Borrar">
+                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                 </svg>
+               </button>
             </div>
           </div>
         </div>

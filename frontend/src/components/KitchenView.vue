@@ -10,9 +10,68 @@ const ordenes = ref([]);
 const loading = ref(true);
 let pollingInterval = null;
 
+let isInitialLoad = true;
+let knownOrderIds = new Set();
+let audioCtx = null;
+
+const initAudio = () => {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+};
+
+const playDing = () => {
+  try {
+    initAudio();
+    // Sonido suave tipo 'burbuja' o 'ping' de check
+    const osc = audioCtx.createOscillator();
+    const osc2 = audioCtx.createOscillator(); // Armónico para brillo
+    const gainNode = audioCtx.createGain();
+    
+    osc.type = 'sine';
+    osc2.type = 'sine';
+    
+    // Frecuencia C6
+    osc.frequency.setValueAtTime(1046.50, audioCtx.currentTime); 
+    // Armónico (una octava más arriba)
+    osc2.frequency.setValueAtTime(2093.00, audioCtx.currentTime); 
+    
+    // Envolvente: ataque rapidísimo y caída suave
+    gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.4, audioCtx.currentTime + 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.0);
+    
+    osc.connect(gainNode);
+    osc2.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    
+    osc.start();
+    osc2.start();
+    osc.stop(audioCtx.currentTime + 1.2);
+    osc2.stop(audioCtx.currentTime + 1.2);
+  } catch(e) {
+    console.warn("Audio Context bloqueado o no soportado", e);
+  }
+};
+
 const fetchOrdenes = async () => {
   try {
     const { data } = await axios.get(`${apiUrl}/ventas/cocina`);
+    
+    const incomingIds = new Set(data.map(o => o.id));
+    
+    if (!isInitialLoad) {
+      const hasNewOrder = data.some(o => !knownOrderIds.has(o.id));
+      if (hasNewOrder) {
+        playDing();
+      }
+    }
+    
+    knownOrderIds = incomingIds;
+    isInitialLoad = false;
     ordenes.value = data;
   } catch (error) {
     console.error('Error fetching orders', error);
@@ -58,6 +117,9 @@ onUnmounted(() => {
       </div>
       
       <div class="flex items-center gap-6">
+        <button @click="playDing" class="text-indigo-400 border border-indigo-400/30 hover:bg-indigo-500/10 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition">
+          🔔 Probar Timbre
+        </button>
         <div class="text-right">
           <div class="text-3xl font-black text-rose-400">{{ ordenes.length }}</div>
           <div class="text-sm font-bold text-slate-400 uppercase tracking-widest">En Cola</div>
@@ -94,7 +156,7 @@ onUnmounted(() => {
           
           <!-- Card Header -->
           <div class="bg-slate-700 px-6 py-4 border-b border-slate-600 flex justify-between items-center">
-            <h2 class="text-3xl font-black text-white">#{{ orden.id }}</h2>
+            <h2 class="text-3xl font-black text-white tracking-tight">ORDEN #{{ orden.id }}</h2>
             <span class="text-slate-300 font-bold bg-slate-800 px-3 py-1 rounded-lg">{{ orden.fecha }}</span>
           </div>
 

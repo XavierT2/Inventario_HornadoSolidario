@@ -58,6 +58,10 @@ const total = computed(() => {
   return carrito.value.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
 });
 
+const totalCajaCajero = computed(() => {
+  return historialVentas.value.reduce((sum, venta) => sum + venta.total, 0);
+});
+
 const cobrar = async () => {
   if (carrito.value.length === 0) return;
 
@@ -140,7 +144,7 @@ const anularVarios = async (detalleId, productoNombre, ventaId, cantidadMax) => 
       
       Swal.fire({ 
         title: '¡DEVOLUCIÓN ACEPTADA!', 
-        html: `<div class="text-4xl font-black text-emerald-600 my-4">ENTREGAR: $ ${amountRefunded.toFixed(2)}</div><p class="font-bold">Devuelve este efectivo al cliente ahora.</p>`, 
+        html: `<div class="text-4xl font-black text-emerald-600 my-4">ENTREGAR: $ ${amountRefunded.toFixed(2)}</div><p class="font-bold">Devuelve este efectivo al cliente.</p>`, 
         icon: 'success', 
         confirmButtonText: '¡Entendido!'
       });

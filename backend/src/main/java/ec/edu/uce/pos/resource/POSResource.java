@@ -39,6 +39,47 @@ public class POSResource {
     }
 
     @POST
+    @Path("/productos")
+    @Transactional
+    public Response crearProducto(ProductoDTO request) {
+        if (request.nombre == null || request.nombre.trim().isEmpty() || request.precio == null) {
+            return Response.status(Response.Status.BAD_REQUEST).entity("Datos inválidos").build();
+        }
+        Producto p = new Producto(request.nombre, request.precio);
+        p.persist();
+        return Response.ok(p).build();
+    }
+
+    @PUT
+    @Path("/productos/{id}")
+    @Transactional
+    public Response editarProducto(@PathParam("id") Long id, ProductoDTO request) {
+        Producto p = Producto.findById(id);
+        if (p == null) return Response.status(Response.Status.NOT_FOUND).build();
+        if (request.nombre != null && !request.nombre.trim().isEmpty()) {
+            p.nombre = request.nombre;
+        }
+        if (request.precio != null) {
+            p.precio = request.precio;
+        }
+        p.persist();
+        return Response.ok(p).build();
+    }
+
+    @DELETE
+    @Path("/productos/{id}")
+    @Transactional
+    public Response eliminarProducto(@PathParam("id") Long id) {
+        try {
+            boolean deleted = Producto.deleteById(id);
+            if (deleted) return Response.ok().build();
+            return Response.status(Response.Status.NOT_FOUND).build();
+        } catch (Exception e) {
+            return Response.status(Response.Status.BAD_REQUEST).entity("No se puede eliminar un producto que ya tiene ventas registradas. Edítalo en su lugar.").build();
+        }
+    }
+
+    @POST
     @Path("/ventas")
     @Transactional
     public Response crearVenta(VentaRequestDTO request) {
@@ -143,6 +184,23 @@ public class POSResource {
         } catch (Exception e) {
             e.printStackTrace();
             return Response.serverError().entity("Error eliminando cajero: " + e.getMessage()).build();
+        }
+    }
+
+    @DELETE
+    @Path("/ventas/reset")
+    @Transactional
+    public Response resetearVentasGlobal() {
+        try {
+            DetalleVenta.deleteAll();
+            Venta.deleteAll();
+            // Reset the auto-increment counters in SQLite explicitly
+            DetalleVenta.getEntityManager().createNativeQuery("DELETE FROM sqlite_sequence WHERE name='ventas'").executeUpdate();
+            DetalleVenta.getEntityManager().createNativeQuery("DELETE FROM sqlite_sequence WHERE name='detalles_venta'").executeUpdate();
+            return Response.ok("Todas las ventas borradas y ticket reiniciado a 1.").build();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Response.serverError().entity("Error reiniciando las ventas: " + e.getMessage()).build();
         }
     }
 
